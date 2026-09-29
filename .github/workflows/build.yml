@@ -1,5 +1,6 @@
-name: Build Android APK
+name: Build the Audio Defence APK
 
+# Runs by itself whenever files are uploaded, and by hand from the Actions tab ("Run workflow").
 on:
   push:
   workflow_dispatch:
@@ -7,33 +8,52 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 60
     steps:
-      - name: Get the code
+      - name: Get this project
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Unpack the project when it was uploaded as one zip file
+        run: |
+          shopt -s nullglob
+          for z in *.zip; do
+            echo "unpacking $z"
+            unzip -q -o "$z" -d /tmp/unpacked
+            cp -r /tmp/unpacked/*/. .
+          done
+          ls
+
+      - name: Get the game's own data (sounds, levels, playlists) from the Windows port's public repository
+        run: |
+          git clone --depth 1 https://github.com/lbk2907/AudioDefence-Windows.git /tmp/adwin
+          mkdir -p app/src/main/assets
+          rm -rf app/src/main/assets/game
+          cp -r /tmp/adwin/game app/src/main/assets/game
+          du -sh app/src/main/assets/game
+          ls app/src/main/assets/game | head -20
+
+      - name: Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Python for the build (Chaquopy needs the same version the app uses)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.13'
 
-      - name: Build the APK
-        run: |
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
-          fi
+      - name: Build the app
+        run: gradle --no-daemon --stacktrace assembleDebug
 
-      - name: Upload the APK
+      - name: Keep the APK where it can be downloaded
         uses: actions/upload-artifact@v4
         with:
           name: AudioDefence-APK
-          path: '**/build/outputs/apk/debug/*.apk'  
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
