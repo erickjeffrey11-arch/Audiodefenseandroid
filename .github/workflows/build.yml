@@ -1,6 +1,7 @@
 name: Build the Audio Defence APK
 
 # Runs by itself whenever files are uploaded, and by hand from the Actions tab ("Run workflow").
+# The steps of the build itself are in ci/build.sh, inside the uploaded project.
 on:
   push:
   workflow_dispatch:
@@ -23,15 +24,6 @@ jobs:
           done
           ls
 
-      - name: Get the game's own data (sounds, levels, playlists) from the Windows port's public repository
-        run: |
-          git clone --depth 1 https://github.com/lbk2907/AudioDefence-Windows.git /tmp/adwin
-          mkdir -p app/src/main/assets
-          rm -rf app/src/main/assets/game
-          cp -r /tmp/adwin/game app/src/main/assets/game
-          du -sh app/src/main/assets/game
-          ls app/src/main/assets/game | head -20
-
       - name: Java
         uses: actions/setup-java@v4
         with:
@@ -48,12 +40,14 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build the app
-        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Get the game's data and build the app
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: bash ci/build.sh
 
       - name: Keep the APK where it can be downloaded
         uses: actions/upload-artifact@v4
         with:
-          name: AudioDefence-APK
-          path: app/build/outputs/apk/debug/*.apk
+          name: AudioDefence-Android-Release
+          path: out/*.apk
           if-no-files-found: error
